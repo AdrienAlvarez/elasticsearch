@@ -1,0 +1,198 @@
+#Exercice 1
+node.name: es-01
+cluster.name: magic-system
+Le nom du fichier à modifier pour paramétrer les options de la JVM est "jvm.options".
+La valeur à écrire pour limiter la heap size à 8GB maximum est "-Xmx8g".
+
+#Exercie 2
+POST /recettes_test/_bulk
+{"index":{}}
+{"title": "Tarte aux pommes", "author": "Alice", "description": "Une tarte aux pommes croustillante et délicieuse", "publication_date": "2022-05-01", "pages": 20}
+
+#Exercice 3 
+On peut utiliser la méthode GET avec l'endpoint "/recettes-test/_search":
+GET /recettes-test/_search
+{
+  "query": {
+    "match": {
+      "description": "pomme"
+    }
+  }
+}
+Si y'a des recettes avec "pomme" dans leur description dans l'index "recettes-test", ça va t'afficher les résultats qui vont avec. Sinon, ça t'affiche rien du tout.
+
+
+Si tu veux trouver les recettes de "Zoé" qui font moins de 21 pages, tu peux utiliser la méthode GET avec l'adresse "/recettes-test/_search". Voilà comment tu peux faire la demande :
+GET /recettes-test/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        { "match": { "author": "Zoé" }},
+        { "range": { "pages": { "lt": 21 }}}
+      ]
+    }
+  }
+}
+
+#Exercice 4
+PUT /recettes-test/_mapping
+{
+  "properties": {
+    "theme": {"type": "keyword"}
+  }
+}
+
+Le genre de champ pour "theme" dépend de comment tu veux l'utiliser. Ici, un champ "keyword" est bon car il stocke des mots sans les analyser.
+
+#Exercice 5 
+POST /_reindex
+{
+  "source": {
+    "index": "recettes-test"
+  },
+  "dest": {
+    "index": "recettes"
+  },
+  "script": {
+    "source": "ctx._source.remove('titre'); ctx._source['title'] = ctx._source['title']",
+    "lang": "painless"
+  }
+}
+
+#Exercice 6
+GET /recettes-test/_search
+{
+  "size": 0,
+  "query": {
+    "bool": {
+      "must": [
+        {"match": {"description": "pomme"}}
+      ]
+    }
+  },
+  "aggs": {
+    "auteurs": {
+      "terms": {
+        "field": "author.keyword",
+        "size": 10
+      },
+      "aggs": {
+        "recettes_avant_2023": {
+          "filter": {
+            "range": {
+              "publication_date": {
+                "lt": "2023-01-01"
+              }
+            }
+          },
+          "aggs": {
+            "count": {
+              "value_count": {
+                "field": "_id"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+Cette requête compte les recettes par auteur en regardant les noms. On filtre les recettes avant 2023 et on compte combien il y en a. Pour trouver les moyennes des pages par auteur, voici la requête :
+GET /recettes-test/_search
+{
+  "size": 0,
+  "aggs": {
+    "auteurs": {
+      "terms": {
+        "field": "author.keyword",
+        "size": 10
+      },
+      "aggs": {
+        "avg_pages": {
+          "avg": {
+            "field": "pages"
+          }
+        }
+      }
+    }
+  }
+}
+Ça compte combien de recettes chaque auteur a écrit, et ça fait la moyenne du nombre de pages des recettes de chaque auteur.
+
+
+#Exercice 7
+PUT /recettes-fr
+{
+  "settings": {
+    "analysis": {
+      "analyzer": {
+        "french": {
+          "tokenizer": "standard",
+          "filter": [
+            "lowercase",
+            "french_elision",
+            "french_stop",
+            "french_stemmer"
+          ]
+        }
+      },
+      "filter": {
+        "french_elision": {
+          "type": "elision",
+          "articles_case": true,
+          "articles": [
+            "l", "m", "t", "qu", "n", "s",
+            "j", "d", "c", "jusqu", "quoiqu",
+            "lorsqu", "puisqu"
+          ]
+        },
+        "french_stop": {
+          "type": "stop",
+          "stopwords": "_french_"
+        },
+        "french_stemmer": {
+          "type": "stemmer",
+          "language": "light_french"
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "title": {
+        "type": "text",
+        "analyzer": "french"
+      },
+      "author": {
+        "type": "keyword"
+      },
+      "description": {
+        "type": "text",
+        "analyzer": "french"
+      },
+      "publication_date": {
+        "type": "date"
+      },
+      "pages": {
+        "type": "integer"
+      }
+    }
+  }
+}
+
+POST _reindex
+{
+  "source": {
+    "index": "recettes"
+  },
+  "dest": {
+    "index": "recettes-fr"
+  },
+  "script": {
+    "source": """
+      ctx._source.remove('id');
+    """
+  }
+}
